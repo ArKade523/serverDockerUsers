@@ -1,0 +1,166 @@
+#!/bin/bash
+
+# Function to generate a random password
+generate_password() {
+  # Number of lines in the word file
+  num_lines=$(wc -l < /usr/share/dict/words)
+
+  # Generate three random numbers between 1 and the number of lines
+  rand1=$((RANDOM % num_lines + 1))
+  rand2=$((RANDOM % num_lines + 1))
+  rand3=$((RANDOM % num_lines + 1))
+
+  # Fetch the words corresponding to those line numbers
+  word1=$(sed -n "${rand1}p" /usr/share/dict/words)
+  word2=$(sed -n "${rand2}p" /usr/share/dict/words)
+  word3=$(sed -n "${rand3}p" /usr/share/dict/words)
+
+  # Combine the words using dashes
+  echo "${word1}-${word2}-${word3}"
+}
+
+# Function to get the next available port starting from 24000
+get_next_available_port() {
+    port=24000
+    while true; do
+        if grep -q "$port" /etc/container_ports.txt; then
+            port=$((port + 1))
+        else
+            echo $port
+            return
+        fi
+    done
+}
+
+# Check if running as root
+if [[ $EUID -ne 0 ]]; then
+    echo "This script must be run as root."
+    exit 1
+fi
+
+# Check if username is provided
+if [ -z "$1" ]; then
+    echo "Usage: $0 <username>"
+    exit 1
+fi
+
+# Set the username
+username="$1"
+
+# Generate a random password
+password=$(generate_password)
+
+# Create the container name
+container_name="container_${username}"
+
+# Create the user
+useradd -m -s /bin/bash "$username" && echo "User ${username} created successfully"
+
+# Set the user's password
+echo "$username:$password" | chpasswd
+
+# Start the Docker container using the port
+docker run -d -network host --name "$container_name" math_deb1 tail -f /dev/null
+
+# Check if the docker group exists and create it if it doesn't
+if ! getent group docker > /dev/null; then
+    groupadd docker
+fi
+
+# Add the new user to the docker group
+usermod -aG docker "$username" && echo "Added user ${username} to the docker permission level group"
+
+# Create the start-up script
+startup_script="/home/$username/start_my_container.sh"
+cat << 'EOL' > "$startup_script"
+#!/bin/bash
+cd 
+echo "Running startup_script"
+
+container_name="container_$USER"
+
+# Check if this container's port is in container_ports.txt
+assigned_port=$(grep "$container_name" /etc/container_ports.txt | cut -d':' -f2)
+
+if [ -z "$assigned_port" ]; then
+    echo "No assigned port found for $container_name. Exiting."
+    exit 1
+fi
+
+container_exists=$(docker ps -aq -f name=$container_name)
+container_running=$(docker ps -q -f name=$container_name)
+
+if [ "$container_running" ]; then
+	echo "Container is running"
+    docker exec -it $container_name /bin/bash
+elif [ "$container_exists" ]; then
+	echo "Container exists but is not running"
+	docker start $container_name 
+    docker exec -it $container_name /bin/bash
+else
+	echo "Container does not exist; creating a new one"
+    docker run -it --network host --name $container_name math_deb1 tail -f /dev/null
+fi
+
+EOL
+
+# Add a .vscode folder with recommended extensions
+vscode_folder="/home/$username/.vscode"
+mkdir -p "$vscode_folder"
+
+cat <<EOL > "$vscode_folder/extensions.json"
+{
+    "recommendations": [
+	"ms-vscode-remote.remote-containers"
+    ]
+
+}
+EOL
+
+cat <<EOL > "$vscode_folder/settings.json"
+{
+    "remote.containers.defaultAttachConfiguration": {
+        "name": "$container_name"
+    },
+    "remote.containers.autoReopenInContainer": true
+}
+EOL
+
+# Set proper permissions for .vscode folder and its content
+chown -R "$username:$username" "$vscode_folder"
+
+# Create .devcontainer directory and configuration
+devcontainer_dir="/home/$username/.devcontainer"
+mkdir -p "$devcontainer_dir"
+
+cat <<EOL > "$devcontainer_dir/devcontainer.json"
+{
+    "name": "Attach to $container_name",
+    "dockerAttach": {
+        "containerName": "$container_name"
+    },
+    "extensions": [
+        "ms-vscode-remote.remote-containers"
+    ]
+}
+EOL
+
+# Set proper permissions for .devcontainer directory and its content
+chown -R "$username:$username" "$devcontainer_dir"
+
+# Make the script executable
+chmod +x "$startup_script"
+
+# Update user's .bashrc to run the start-up script
+echo "exec $startup_script" >> "/home/$username/.bashrc"
+
+# Set proper permissions
+chown -R "$username:$username" "/home/$username"
+
+# Store password in root-access only file
+echo "$username:$password" >> /home/admin/user_passwords.txt
+chmod 600 /home/admin/user_passwords.txt  # Set file permission to read-only for root
+
+# Output the username and password
+echo "Created user $username with password: $password"
+

@@ -1,0 +1,35 @@
+#!/bin/bash
+
+# Check if the script is run as root
+if [ "$EUID" -ne 0 ]; then
+  echo "Please run as root."
+  exit
+fi
+
+# Check if username is provided
+if [ -z "$1" ]; then
+    echo "Usage: $0 <username>"
+    exit 1
+fi
+
+# Set the username and container_name
+username="$1"
+container_name="container_${username}"
+
+# Stop and remove Docker container
+docker stop $container_name
+docker rm $container_name
+
+# Remove the user's entry from the user_passwords.txt file
+sed -i "/^$username:/d" /home/admin/user_passwords.txt
+
+sed -i "s/^$container_name:/:/" /etc/container_ports.txt
+
+# kill all processes owned by user
+pkill -u $username
+
+# Remove the user and their home directory
+userdel -r $username > /dev/null
+
+echo "Removed user $username and cleaned up."
+
