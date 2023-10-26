@@ -59,8 +59,8 @@ useradd -m -s /bin/bash "$username" && echo "User ${username} created successful
 # Set the user's password
 echo "$username:$password" | chpasswd
 
-# Start the Docker container using the port
-docker run -d -network host --name "$container_name" math_deb1 tail -f /dev/null
+# Start the Docker container 
+docker run -d --network=host --name "$container_name" math_deb1 tail -f /dev/null
 
 # Check if the docker group exists and create it if it doesn't
 if ! getent group docker > /dev/null; then
@@ -79,14 +79,6 @@ echo "Running startup_script"
 
 container_name="container_$USER"
 
-# Check if this container's port is in container_ports.txt
-assigned_port=$(grep "$container_name" /etc/container_ports.txt | cut -d':' -f2)
-
-if [ -z "$assigned_port" ]; then
-    echo "No assigned port found for $container_name. Exiting."
-    exit 1
-fi
-
 container_exists=$(docker ps -aq -f name=$container_name)
 container_running=$(docker ps -q -f name=$container_name)
 
@@ -99,7 +91,7 @@ elif [ "$container_exists" ]; then
     docker exec -it $container_name /bin/bash
 else
 	echo "Container does not exist; creating a new one"
-    docker run -it --network host --name $container_name math_deb1 tail -f /dev/null
+    docker run -it --network=host --name $container_name math_deb1 tail -f /dev/null
 fi
 
 EOL
@@ -158,8 +150,8 @@ echo "exec $startup_script" >> "/home/$username/.bashrc"
 chown -R "$username:$username" "/home/$username"
 
 # Store password in root-access only file
-echo "$username:$password" >> /home/admin/user_passwords.txt
-chmod 600 /home/admin/user_passwords.txt  # Set file permission to read-only for root
+echo "$username:$password" >> /home/mathadmin/user_passwords.txt
+chmod 600 /home/mathadmin/user_passwords.txt  # Set file permission to read-only for root
 
 # Output the username and password
 echo "Created user $username with password: $password"

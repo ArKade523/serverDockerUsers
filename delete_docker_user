@@ -21,9 +21,7 @@ docker stop $container_name
 docker rm $container_name
 
 # Remove the user's entry from the user_passwords.txt file
-sed -i "/^$username:/d" /home/admin/user_passwords.txt
-
-sed -i "s/^$container_name:/:/" /etc/container_ports.txt
+sed -i "/^$username:/d" /home/mathadmin/user_passwords.txt
 
 # kill all processes owned by user
 pkill -u $username
