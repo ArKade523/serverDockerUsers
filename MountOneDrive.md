@@ -38,5 +38,7 @@ sudo docker run -v /home/<username>/:/home/math/ -d --network=host --name contai
 6. Copy the .tar file and unzip it
 ```bash
 sudo docker cp <username>_backup.tar container_<username>:/
-sudo docker exec "echo math | sudo -S tar xf /<username>_backup.tar -C /" 
+sudo docker exec container_<username> /bin/bash
+  # From inside the container
+  sudo tar xf <username>_backup.tar -C /
 ```
