@@ -1,0 +1,21 @@
+#!/bin/bash
+echo "Running startup_script"
+
+container_name="container_$USER"
+
+container_exists=$(docker ps -aq -f name=$container_name)
+container_running=$(docker ps -q -f name=$container_name)
+
+if [ "$container_running" ]; then
+    echo "Container is running"
+    docker exec $container_name /bin/bash
+elif [ "$container_exists" ]; then
+    echo "Container exists but is not running"
+    docker start $container_name
+    docker exec $container_name /bin/bash
+else
+    echo "Container does not exist; creating a new one"
+    docker run -d --network=host --name $container_name math_deb1 tail -f /dev/null
+    docker exec $container_name /bin/bash
+fi
+
